@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, Instrument};
 
 use crate::auth::backend::ConsoleRedirectBackend;
-use crate::cancellation::{CancellationHandlerMain, CancellationHandlerMainInternal};
+use crate::cancellation::{CancellationHandlerMain, CancellationHandlerMainInternal, Session};
 use crate::config::{ProxyConfig, ProxyProtocolV2};
 use crate::context::RequestContext;
 use crate::error::ReportableError;
@@ -18,6 +18,7 @@ use crate::proxy::passthrough::ProxyPassthrough;
 use crate::proxy::{
     prepare_client_connection, run_until_cancelled, ClientRequestError, ErrorSource,
 };
+use crate::redis::kv_ops::RedisKVClient;
 
 pub async fn task_main(
     config: &'static ProxyConfig,
@@ -140,6 +141,7 @@ pub async fn task_main(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_client<S: AsyncRead + AsyncWrite + Unpin>(
     config: &'static ProxyConfig,
     backend: &'static ConsoleRedirectBackend,
@@ -171,13 +173,13 @@ pub(crate) async fn handle_client<S: AsyncRead + AsyncWrite + Unpin>(
         HandshakeData::Cancel(cancel_key_data) => {
             // spawn a task to cancel the session, but don't wait for it
             cancellations.spawn({
-                let cancellation_handler_clone = Arc::clone(&cancellation_handler);
+                let cancellation_handler_clone  = Arc::clone(&cancellation_handler);
                 let ctx = ctx.clone();
                 let cancel_span = tracing::span!(parent: None, tracing::Level::INFO, "cancel_session", session_id = ?ctx.session_id());
                 cancel_span.follows_from(tracing::Span::current());
                 async move {
                     cancellation_handler_clone
-                        .cancel_session_auth(
+                        .cancel_session(
                             cancel_key_data,
                             ctx,
                             config.authentication_config.ip_allowlist_check_enabled,
@@ -195,7 +197,7 @@ pub(crate) async fn handle_client<S: AsyncRead + AsyncWrite + Unpin>(
 
     ctx.set_db_options(params.clone());
 
-    let (node_info, user_info, ip_allowlist) = match backend
+    let (node_info, user_info, _ip_allowlist) = match backend
         .authenticate(ctx, &config.authentication_config, &mut stream)
         .await
     {
@@ -220,10 +222,23 @@ pub(crate) async fn handle_client<S: AsyncRead + AsyncWrite + Unpin>(
     .or_else(|e| stream.throw_error(e))
     .await?;
 
-    node.cancel_closure
-        .set_ip_allowlist(ip_allowlist.unwrap_or_default());
-    let session = cancellation_handler.get_session();
-    prepare_client_connection(&node, &session, &mut stream).await?;
+    let cancellation_handler_clone = Arc::clone(&cancellation_handler);
+    let session: Session<RedisKVClient> = cancellation_handler_clone.get_key(); // generate key for this session
+    let session_key = *session.key();
+
+    tokio::spawn({
+        let cancel_closure = node.cancel_closure.clone();
+        async move {
+            if let Err(e) = cancellation_handler_clone
+                .write_cancel_key(&session_key, cancel_closure)
+                .await
+            {
+                error!("Failed to write cancel key: {e:#}");
+            }
+        }
+    });
+
+    prepare_client_connection(&node, session_key, &mut stream).await?;
 
     // Before proxy passing, forward to compute whatever data is left in the
     // PqStream input buffer. Normally there is none, but our serverless npm
@@ -237,8 +252,8 @@ pub(crate) async fn handle_client<S: AsyncRead + AsyncWrite + Unpin>(
         aux: node.aux.clone(),
         compute: node,
         session_id: ctx.session_id(),
+        cancel: session,
         _req: request_gauge,
         _conn: conn_gauge,
-        _cancel: session,
     }))
 }

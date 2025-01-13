@@ -7,10 +7,10 @@ use anyhow::bail;
 use futures::future::Either;
 use proxy::auth::backend::jwt::JwkCache;
 use proxy::auth::backend::{AuthRateLimiter, ConsoleRedirectBackend, MaybeOwned};
-use proxy::cancellation::{CancelMap, CancellationHandler};
+use proxy::cancellation::CancellationHandler;
 use proxy::config::{
-    self, remote_storage_from_toml, AuthenticationConfig, CacheOptions, ComputeConfig, HttpConfig,
-    ProjectInfoCacheOptions, ProxyConfig, ProxyProtocolV2,
+    self, remote_storage_from_toml, AuthenticationConfig, CacheOptions,
+    ComputeConfig, HttpConfig, ProjectInfoCacheOptions, ProxyConfig, ProxyProtocolV2,
 };
 use proxy::context::parquet::ParquetUploadArgs;
 use proxy::http::health_server::AppMetrics;
@@ -18,8 +18,8 @@ use proxy::metrics::Metrics;
 use proxy::rate_limiter::{
     EndpointRateLimiter, LeakyBucketConfig, RateBucketInfo, WakeComputeRateLimiter,
 };
-use proxy::redis::cancellation_publisher::RedisPublisherClient;
 use proxy::redis::connection_with_credentials_provider::ConnectionWithCredentialsProvider;
+use proxy::redis::kv_ops::{RedisKVClient, RedisKVClientExt};
 use proxy::redis::{elasticache, notifications};
 use proxy::scram::threadpool::ThreadPool;
 use proxy::serverless::cancel_set::CancelSet;
@@ -382,27 +382,20 @@ async fn main() -> anyhow::Result<()> {
 
     let cancellation_token = CancellationToken::new();
 
-    let cancel_map = CancelMap::default();
-
     let redis_rps_limit = Vec::leak(args.redis_rps_limit.clone());
     RateBucketInfo::validate(redis_rps_limit)?;
 
-    let redis_publisher = match &regional_redis_client {
-        Some(redis_publisher) => Some(Arc::new(Mutex::new(RedisPublisherClient::new(
+    let redis_kv_client = match &regional_redis_client {
+        Some(redis_publisher) => Some(Arc::new(Mutex::new(RedisKVClient::new(
             redis_publisher.clone(),
-            args.region.clone(),
             redis_rps_limit,
         )?))),
         None => None,
     };
 
-    let cancellation_handler = Arc::new(CancellationHandler::<
-        Option<Arc<Mutex<RedisPublisherClient>>>,
-    >::new(
+    let cancellation_handler = Arc::new(CancellationHandler::<RedisKVClient>::new(
         &config.connect_to_compute,
-        cancel_map.clone(),
-        redis_publisher,
-        proxy::metrics::CancellationSource::FromClient,
+        redis_kv_client,
     ));
 
     // bit of a hack - find the min rps and max rps supported and turn it into
@@ -495,19 +488,15 @@ async fn main() -> anyhow::Result<()> {
                     let cache = api.caches.project_info.clone();
                     if let Some(client) = client1 {
                         maintenance_tasks.spawn(notifications::task_main(
-                            config,
                             client,
                             cache.clone(),
-                            cancel_map.clone(),
                             args.region.clone(),
                         ));
                     }
                     if let Some(client) = client2 {
                         maintenance_tasks.spawn(notifications::task_main(
-                            config,
                             client,
                             cache.clone(),
-                            cancel_map.clone(),
                             args.region.clone(),
                         ));
                     }

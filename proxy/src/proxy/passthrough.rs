@@ -8,6 +8,7 @@ use crate::compute::PostgresConnection;
 use crate::config::ComputeConfig;
 use crate::control_plane::messages::MetricsAuxInfo;
 use crate::metrics::{Direction, Metrics, NumClientConnectionsGuard, NumConnectionRequestsGuard};
+use crate::redis::kv_ops::RedisKVClientExt;
 use crate::stream::Stream;
 use crate::usage_metrics::{Ids, MetricCounterRecorder, USAGE_METRICS};
 
@@ -56,18 +57,18 @@ pub(crate) async fn proxy_pass(
     Ok(())
 }
 
-pub(crate) struct ProxyPassthrough<P, S> {
+pub(crate) struct ProxyPassthrough<P: RedisKVClientExt, S> {
     pub(crate) client: Stream<S>,
     pub(crate) compute: PostgresConnection,
     pub(crate) aux: MetricsAuxInfo,
     pub(crate) session_id: uuid::Uuid,
+    pub(crate) cancel: cancellation::Session<P>,
 
     pub(crate) _req: NumConnectionRequestsGuard<'static>,
     pub(crate) _conn: NumClientConnectionsGuard<'static>,
-    pub(crate) _cancel: cancellation::Session<P>,
 }
 
-impl<P, S: AsyncRead + AsyncWrite + Unpin> ProxyPassthrough<P, S> {
+impl<P: RedisKVClientExt, S: AsyncRead + AsyncWrite + Unpin> ProxyPassthrough<P, S> {
     pub(crate) async fn proxy_pass(
         self,
         compute_config: &ComputeConfig,
@@ -81,6 +82,24 @@ impl<P, S: AsyncRead + AsyncWrite + Unpin> ProxyPassthrough<P, S> {
         {
             tracing::warn!(session_id = ?self.session_id, ?err, "could not cancel the query in the database");
         }
+
+        self.cancel.remove_cancel_key()
+            .await
+            .inspect_err(|e |
+                tracing::warn!(session_id = ?self.session_id, ?e, "could not remove the key in the database"))
+            .ok();
+
+        // let cancel_ft = self.cancel.clone();
+        // let session_id = self.session_id.clone();
+        // tokio::spawn(async move {
+        //     // cancel_clone.remove_cancel_key()
+        //     self.cancel.remove_cancel_key()
+        //     .await
+        //     .inspect_err(|e |
+        //         tracing::warn!(session_id = ?session_id, ?e, "could not cancel the query in the database"))
+        //     .ok();
+        // });
+
         res
     }
 }
