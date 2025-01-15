@@ -462,6 +462,10 @@ pub struct TenantConfigPatch {
     #[serde(skip_serializing_if = "FieldPatch::is_noop")]
     pub compaction_algorithm: FieldPatch<CompactionAlgorithmSettings>,
     #[serde(skip_serializing_if = "FieldPatch::is_noop")]
+    pub compaction_flush_delay_threshold: FieldPatch<usize>,
+    #[serde(skip_serializing_if = "FieldPatch::is_noop")]
+    pub compaction_flush_stall_threshold: FieldPatch<usize>,
+    #[serde(skip_serializing_if = "FieldPatch::is_noop")]
     pub gc_horizon: FieldPatch<u64>,
     #[serde(skip_serializing_if = "FieldPatch::is_noop")]
     pub gc_period: FieldPatch<String>,
@@ -518,6 +522,8 @@ pub struct TenantConfig {
     pub compaction_threshold: Option<usize>,
     // defer parsing compaction_algorithm, like eviction_policy
     pub compaction_algorithm: Option<CompactionAlgorithmSettings>,
+    pub compaction_flush_delay_threshold: Option<usize>,
+    pub compaction_flush_stall_threshold: Option<usize>,
     pub gc_horizon: Option<u64>,
     pub gc_period: Option<String>,
     pub image_creation_threshold: Option<usize>,
@@ -551,6 +557,8 @@ impl TenantConfig {
             mut compaction_period,
             mut compaction_threshold,
             mut compaction_algorithm,
+            mut compaction_flush_delay_threshold,
+            mut compaction_flush_stall_threshold,
             mut gc_horizon,
             mut gc_period,
             mut image_creation_threshold,
@@ -583,6 +591,12 @@ impl TenantConfig {
         patch.compaction_period.apply(&mut compaction_period);
         patch.compaction_threshold.apply(&mut compaction_threshold);
         patch.compaction_algorithm.apply(&mut compaction_algorithm);
+        patch
+            .compaction_flush_delay_threshold
+            .apply(&mut compaction_flush_delay_threshold);
+        patch
+            .compaction_flush_stall_threshold
+            .apply(&mut compaction_flush_stall_threshold);
         patch.gc_horizon.apply(&mut gc_horizon);
         patch.gc_period.apply(&mut gc_period);
         patch
@@ -635,6 +649,8 @@ impl TenantConfig {
             compaction_period,
             compaction_threshold,
             compaction_algorithm,
+            compaction_flush_delay_threshold,
+            compaction_flush_stall_threshold,
             gc_horizon,
             gc_period,
             image_creation_threshold,

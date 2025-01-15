@@ -234,9 +234,17 @@ pub struct TenantConfigToml {
     // Duration::ZERO means automatic compaction is disabled.
     #[serde(with = "humantime_serde")]
     pub compaction_period: Duration,
-    // Level0 delta layer threshold for compaction.
+    /// Level0 delta layer threshold for compaction.
     pub compaction_threshold: usize,
     pub compaction_algorithm: crate::models::CompactionAlgorithmSettings,
+    /// Level0 delta layer threshold at which to delay layer flushes for compaction backpressure,
+    /// such that they take 2x as long, and start waiting for layer flushes during ephemeral layer
+    /// rolls. This helps compaction keep up with WAL ingestion, and avoids read amplification
+    /// blowing up. Should be >compaction_threshold. If None, defaults to 2 * compaction_threshold.
+    pub compaction_flush_delay_threshold: Option<usize>,
+    /// Level0 delta layer threshold at which to stall layer flushes. If None, defaults to
+    /// 4 * compaction_threshold. Must be >compaction_threshold to avoid compaction deadlock.
+    pub compaction_flush_stall_threshold: Option<usize>,
     // Determines how much history is retained, to allow
     // branching and read replicas at an older point in time.
     // The unit is #of bytes of WAL.
@@ -527,6 +535,8 @@ impl Default for TenantConfigToml {
             compaction_algorithm: crate::models::CompactionAlgorithmSettings {
                 kind: DEFAULT_COMPACTION_ALGORITHM,
             },
+            compaction_flush_delay_threshold: None,
+            compaction_flush_stall_threshold: None,
             gc_horizon: DEFAULT_GC_HORIZON,
             gc_period: humantime::parse_duration(DEFAULT_GC_PERIOD)
                 .expect("cannot parse default gc period"),

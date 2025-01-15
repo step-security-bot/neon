@@ -41,6 +41,9 @@ pub(crate) enum StorageTimeOperation {
     #[strum(serialize = "compact")]
     Compact,
 
+    #[strum(serialize = "compact flush delay")]
+    CompactFlushDelay,
+
     #[strum(serialize = "create images")]
     CreateImages,
 
@@ -2575,7 +2578,6 @@ impl Drop for AlwaysRecordingStorageTimeMetricsTimer {
 
 impl AlwaysRecordingStorageTimeMetricsTimer {
     /// Returns the elapsed duration of the timer.
-    #[allow(unused)]
     pub fn elapsed(&self) -> Duration {
         self.0.as_ref().expect("not dropped yet").elapsed()
     }
@@ -2634,6 +2636,7 @@ pub(crate) struct TimelineMetrics {
     timeline_id: String,
     pub flush_time_histo: StorageTimeMetrics,
     pub compact_time_histo: StorageTimeMetrics,
+    pub compact_flush_delay_histo: StorageTimeMetrics,
     pub create_images_time_histo: StorageTimeMetrics,
     pub logical_size_histo: StorageTimeMetrics,
     pub imitate_logical_size_histo: StorageTimeMetrics,
@@ -2680,6 +2683,12 @@ impl TimelineMetrics {
         );
         let compact_time_histo = StorageTimeMetrics::new(
             StorageTimeOperation::Compact,
+            &tenant_id,
+            &shard_id,
+            &timeline_id,
+        );
+        let compact_flush_delay_histo = StorageTimeMetrics::new(
+            StorageTimeOperation::CompactFlushDelay,
             &tenant_id,
             &shard_id,
             &timeline_id,
@@ -2824,6 +2833,7 @@ impl TimelineMetrics {
             timeline_id,
             flush_time_histo,
             compact_time_histo,
+            compact_flush_delay_histo,
             create_images_time_histo,
             logical_size_histo,
             imitate_logical_size_histo,
