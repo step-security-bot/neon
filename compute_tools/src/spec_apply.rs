@@ -63,6 +63,7 @@ pub enum ApplySpecPhase {
     HandleNeonExtension,
     CreateAvailabilityCheck,
     DropRoles,
+    FinalizeDropLogicalSubscriptions,
 }
 
 pub struct Operation {
@@ -712,5 +713,9 @@ async fn get_operations<'a>(
 
             Ok(Box::new(operations))
         }
+        ApplySpecPhase::FinalizeDropLogicalSubscriptions => Ok(Box::new(once(Operation {
+            query: String::from(include_str!("sql/finalize_drop_subscriptions.sql")),
+            comment: None,
+        }))),
     }
 }

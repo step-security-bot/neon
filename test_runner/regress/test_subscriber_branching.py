@@ -84,6 +84,10 @@ def test_subscriber_branching(neon_simple_env: NeonEnv):
             res = scur.fetchall()
             assert res[0][0] == n_records
 
+            scur.execute("SELECT timeline_id from neon_migration.drop_subscriptions_done")
+            res = scur.fetchall()
+            log.info(f"timeline_id = {res}")
+
             # ensure that there are no subscriptions in this database
             scur.execute("SELECT 1 FROM pg_catalog.pg_subscription WHERE subname = 'sub'")
             assert len(scur.fetchall()) == 0
@@ -127,6 +131,24 @@ def test_subscriber_branching(neon_simple_env: NeonEnv):
             assert res[0][0] == n_records
 
         # ensure that new publication works as expected after compute restart
+        # first restart with drop_subscriptions_before_start=True
+        # to emulate the case when compute restarts within the VM with stale spec
+        sub_child_1.stop()
+        sub_child_1.respec(
+            skip_pg_catalog_updates=False,
+            drop_subscriptions_before_start=True,
+        )
+        sub_child_1.start()
+
+        with sub_child_1.cursor() as scur:
+            scur.execute("SELECT timeline_id from neon_migration.drop_subscriptions_done")
+            res = scur.fetchall()
+            log.info(f"timeline_id = {res}")
+
+            # ensure that even though the flag is set, we didn't drop new subscription
+            scur.execute("SELECT 1 FROM pg_catalog.pg_subscription WHERE subname = 'sub_new'")
+            assert len(scur.fetchall()) == 1
+
         sub_child_1.stop()
         sub_child_1.respec(
             skip_pg_catalog_updates=False,
@@ -138,6 +160,10 @@ def test_subscriber_branching(neon_simple_env: NeonEnv):
         insert_data(pub, n_records)
         n_records += n_records
         with sub_child_1.cursor() as scur:
+            scur.execute("SELECT timeline_id from neon_migration.drop_subscriptions_done")
+            res = scur.fetchall()
+            log.info(f"timeline_id = {res}")
+
             # ensure that there is a subscriptions in this database
             scur.execute("SELECT 1 FROM pg_catalog.pg_subscription WHERE subname = 'sub_new'")
             assert len(scur.fetchall()) == 1
@@ -155,3 +181,29 @@ def test_subscriber_branching(neon_simple_env: NeonEnv):
             scur.execute("SELECT count(*) FROM t")
             res = scur.fetchall()
             assert res[0][0] == n_records
+
+        # test that we can create a branch of a branch
+        env.create_branch(
+            "subscriber_child_2",
+            ancestor_branch_name="subscriber_child_1",
+        )
+        sub_child_2 = env.endpoints.create("subscriber_child_2")
+        # Pass drop_subscriptions_before_start flag
+        sub_child_2.respec(
+            skip_pg_catalog_updates=False,
+            drop_subscriptions_before_start=True,
+        )
+        sub_child_2.start()
+
+        # ensure that subscriber_child_2 does not inherit subscription from child_1
+        with sub_child_2.cursor() as scur:
+            # ensure that drop_subscriptions_done happened on this timeline as well
+            scur.execute("SELECT timeline_id from neon_migration.drop_subscriptions_done")
+            res = scur.fetchall()
+            log.info(f"timeline_ids: {res}")
+            assert len(res) == 2
+
+            # ensure that there are no subscriptions in this database
+            scur.execute("SELECT count(*) FROM pg_catalog.pg_subscription")
+            res = scur.fetchall()
+            assert res[0][0] == 0

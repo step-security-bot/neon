@@ -42,8 +42,8 @@ use crate::pg_helpers::*;
 use crate::spec::*;
 use crate::spec_apply::ApplySpecPhase::{
     CreateAndAlterDatabases, CreateAndAlterRoles, CreateAvailabilityCheck, CreateSuperUser,
-    DropInvalidDatabases, DropRoles, HandleNeonExtension, HandleOtherExtensions,
-    RenameAndDeleteDatabases, RenameRoles, RunInEachDatabase,
+    DropInvalidDatabases, DropRoles, FinalizeDropLogicalSubscriptions, HandleNeonExtension,
+    HandleOtherExtensions, RenameAndDeleteDatabases, RenameRoles, RunInEachDatabase,
 };
 use crate::spec_apply::PerDatabasePhase;
 use crate::spec_apply::PerDatabasePhase::{
@@ -337,6 +337,15 @@ impl ComputeNode {
 
     pub fn get_status(&self) -> ComputeStatus {
         self.state.lock().unwrap().status
+    }
+
+    pub fn get_timeline_id(&self) -> Option<TimelineId> {
+        self.state
+            .lock()
+            .unwrap()
+            .pspec
+            .as_ref()
+            .map(|s| s.timeline_id)
     }
 
     // Remove `pgdata` directory and create it again with right permissions.
@@ -928,6 +937,54 @@ impl ComputeNode {
                 .map(|role| (role.name.clone(), role))
                 .collect::<HashMap<String, Role>>();
 
+            // Check if we need to drop subscriptions before starting the endpoint.
+            //
+            // It is important to do this operation exactly once when endpoint starts on a new branch.
+            // Otherwise, we may drop not inherited, but newly created subscriptions.
+            //
+            // We cannot rely only on spec.drop_subscriptions_before_start flag,
+            // because if for some reason compute restarts inside VM,
+            // it will start again with the same spec and flag value.
+            //
+            // To handle this, we save the fact of the operation in the database
+            // in the neon_migration_test.drop_subscriptions_done table.
+            // If the table does not exist, we assume that the operation was never performed, so we must do it.
+            // If table exists, we check if the operation was performed on the current timelilne.
+            //
+            let mut drop_subscriptions_done = false;
+
+            if spec.drop_subscriptions_before_start {
+                let timeline_id = self.get_timeline_id().expect("timeline_id must be set");
+                let query = format!("select 1 from neon_migration.drop_subscriptions_done where timeline_id = '{}'", timeline_id);
+
+                info!("Checking if drop_subscriptions_done was already performed for timeline_id: {}", timeline_id);
+                info!("Query: {}", query);
+
+                drop_subscriptions_done =  match
+                    client.simple_query(&query).await {
+                    Ok(result) => {
+                        if let postgres::SimpleQueryMessage::Row(row) = &result[0] {
+                            info!("drop_subscriptions_done: {:?}", row);
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    Err(e) =>
+                    {
+                        if e.to_string().contains("does not exist") {
+                            false
+                        } else {
+                            // We don't expect any other error here, except for the schema/table not existing
+                            // Is it safe to ignore them anyway?
+                            // Worst case - we'll drop the subscriptions, we shouldn't have dropped.
+                        false
+                        }
+                    }
+                }
+            };
+
+
             let jwks_roles = Arc::new(
                 spec.as_ref()
                     .local_proxy_config
@@ -1069,7 +1126,7 @@ impl ComputeNode {
                         HandleAnonExtension,
                     ];
 
-                    if spec.drop_subscriptions_before_start {
+                    if spec.drop_subscriptions_before_start && !drop_subscriptions_done {
                         info!("adding DropLogicalSubscriptions phase because drop_subscriptions_before_start is set");
                         phases.push(DropLogicalSubscriptions);
                     }
@@ -1093,12 +1150,19 @@ impl ComputeNode {
                 handle.await??;
             }
 
-            for phase in vec![
+            let mut phases = vec![
                 HandleOtherExtensions,
                 HandleNeonExtension,
                 CreateAvailabilityCheck,
                 DropRoles,
-            ] {
+            ];
+
+            if spec.drop_subscriptions_before_start && !drop_subscriptions_done {
+                info!("Adding FinalizeDropLogicalSubscriptions phase because drop_subscriptions_before_start is set");
+                phases.push(FinalizeDropLogicalSubscriptions);
+            }
+
+            for phase in phases {
                 debug!("Applying phase {:?}", &phase);
                 apply_operations(
                     spec.clone(),
@@ -1109,6 +1173,7 @@ impl ComputeNode {
                 )
                 .await?;
             }
+
 
             Ok::<(), anyhow::Error>(())
         })?;
