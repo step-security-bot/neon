@@ -17,6 +17,6 @@ BEGIN
     -- use upsert to avoid the table bloat in case of cascade branching (branch of a branch)
     INSERT INTO neon.drop_subscriptions_done VALUES (1, current_setting('neon.timeline_id'))
         ON CONFLICT (id) DO UPDATE
-         SET updated_at = current_setting('neon.timeline_id');
+         SET timeline_id = current_setting('neon.timeline_id');
 END
 $$
