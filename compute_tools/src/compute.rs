@@ -44,6 +44,7 @@ use crate::spec_apply::ApplySpecPhase::{
     CreateAndAlterDatabases, CreateAndAlterRoles, CreateAvailabilityCheck, CreateSuperUser,
     DropInvalidDatabases, DropRoles, FinalizeDropLogicalSubscriptions, HandleNeonExtension,
     HandleOtherExtensions, RenameAndDeleteDatabases, RenameRoles, RunInEachDatabase,
+    CreateSchemaNeon,
 };
 use crate::spec_apply::PerDatabasePhase;
 use crate::spec_apply::PerDatabasePhase::{
@@ -1074,6 +1075,7 @@ impl ComputeNode {
                 CreateAndAlterRoles,
                 RenameAndDeleteDatabases,
                 CreateAndAlterDatabases,
+                CreateSchemaNeon,
             ] {
                 info!("Applying phase {:?}", &phase);
                 apply_operations(
@@ -1146,11 +1148,12 @@ impl ComputeNode {
 
             let mut phases = vec![
                 HandleOtherExtensions,
-                HandleNeonExtension,
+                HandleNeonExtension, // This step depends on CreateSchemaNeon
                 CreateAvailabilityCheck,
                 DropRoles,
             ];
 
+            // This step depends on CreateSchemaNeon
             if spec.drop_subscriptions_before_start && !drop_subscriptions_done {
                 info!("Adding FinalizeDropLogicalSubscriptions phase because drop_subscriptions_before_start is set");
                 phases.push(FinalizeDropLogicalSubscriptions);

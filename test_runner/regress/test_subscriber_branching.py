@@ -201,7 +201,7 @@ def test_subscriber_branching(neon_simple_env: NeonEnv):
             scur.execute("SELECT timeline_id from neon.drop_subscriptions_done")
             res = scur.fetchall()
             log.info(f"timeline_ids: {res}")
-            assert len(res) == 2
+            assert len(res) == 1
 
             # ensure that there are no subscriptions in this database
             scur.execute("SELECT count(*) FROM pg_catalog.pg_subscription")

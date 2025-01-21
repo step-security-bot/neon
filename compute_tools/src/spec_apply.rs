@@ -58,6 +58,7 @@ pub enum ApplySpecPhase {
     CreateAndAlterRoles,
     RenameAndDeleteDatabases,
     CreateAndAlterDatabases,
+    CreateSchemaNeon,
     RunInEachDatabase { db: DB, subphase: PerDatabasePhase },
     HandleOtherExtensions,
     HandleNeonExtension,
@@ -443,6 +444,13 @@ async fn get_operations<'a>(
 
             Ok(Box::new(operations))
         }
+        ApplySpecPhase::CreateSchemaNeon =>
+        {
+            Ok(Box::new(once(Operation {
+                query: String::from("CREATE SCHEMA IF NOT EXISTS neon"),
+                comment: Some(String::from("create schema for neon extension and utils tables")),
+            })))
+        }
         ApplySpecPhase::RunInEachDatabase { db, subphase } => {
             match subphase {
                 PerDatabasePhase::DropLogicalSubscriptions => {
@@ -667,10 +675,6 @@ async fn get_operations<'a>(
         }
         ApplySpecPhase::HandleNeonExtension => {
             let operations = vec![
-                Operation {
-                    query: String::from("CREATE SCHEMA IF NOT EXISTS neon"),
-                    comment: Some(String::from("init: add schema for extension")),
-                },
                 Operation {
                     query: String::from("CREATE EXTENSION IF NOT EXISTS neon WITH SCHEMA neon"),
                     comment: Some(String::from(
