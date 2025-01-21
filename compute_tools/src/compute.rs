@@ -41,10 +41,10 @@ use crate::local_proxy;
 use crate::pg_helpers::*;
 use crate::spec::*;
 use crate::spec_apply::ApplySpecPhase::{
-    CreateAndAlterDatabases, CreateAndAlterRoles, CreateAvailabilityCheck, CreateSuperUser,
-    DropInvalidDatabases, DropRoles, FinalizeDropLogicalSubscriptions, HandleNeonExtension,
-    HandleOtherExtensions, RenameAndDeleteDatabases, RenameRoles, RunInEachDatabase,
-    CreateSchemaNeon,
+    CreateAndAlterDatabases, CreateAndAlterRoles, CreateAvailabilityCheck, CreateSchemaNeon,
+    CreateSuperUser, DropInvalidDatabases, DropRoles, FinalizeDropLogicalSubscriptions,
+    HandleNeonExtension, HandleOtherExtensions, RenameAndDeleteDatabases, RenameRoles,
+    RunInEachDatabase,
 };
 use crate::spec_apply::PerDatabasePhase;
 use crate::spec_apply::PerDatabasePhase::{

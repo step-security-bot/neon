@@ -444,13 +444,12 @@ async fn get_operations<'a>(
 
             Ok(Box::new(operations))
         }
-        ApplySpecPhase::CreateSchemaNeon =>
-        {
-            Ok(Box::new(once(Operation {
-                query: String::from("CREATE SCHEMA IF NOT EXISTS neon"),
-                comment: Some(String::from("create schema for neon extension and utils tables")),
-            })))
-        }
+        ApplySpecPhase::CreateSchemaNeon => Ok(Box::new(once(Operation {
+            query: String::from("CREATE SCHEMA IF NOT EXISTS neon"),
+            comment: Some(String::from(
+                "create schema for neon extension and utils tables",
+            )),
+        }))),
         ApplySpecPhase::RunInEachDatabase { db, subphase } => {
             match subphase {
                 PerDatabasePhase::DropLogicalSubscriptions => {
