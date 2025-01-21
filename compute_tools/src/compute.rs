@@ -947,28 +947,22 @@ impl ComputeNode {
             // it will start again with the same spec and flag value.
             //
             // To handle this, we save the fact of the operation in the database
-            // in the neon_migration_test.drop_subscriptions_done table.
+            // in the neon.drop_subscriptions_done table.
             // If the table does not exist, we assume that the operation was never performed, so we must do it.
             // If table exists, we check if the operation was performed on the current timelilne.
             //
             let mut drop_subscriptions_done = false;
 
             if spec.drop_subscriptions_before_start {
-                let timeline_id = self.get_timeline_id().expect("timeline_id must be set");
-                let query = format!("select 1 from neon_migration.drop_subscriptions_done where timeline_id = '{}'", timeline_id);
+                let timeline_id = self.get_timeline_id().context("timeline_id must be set")?;
+                let query = format!("select 1 from neon.drop_subscriptions_done where timeline_id = '{}'", timeline_id);
 
-                info!("Checking if drop_subscriptions_done was already performed for timeline_id: {}", timeline_id);
-                info!("Query: {}", query);
+                info!("Checking if drop subscription operation was already performed for timeline_id: {}", timeline_id);
 
                 drop_subscriptions_done =  match
                     client.simple_query(&query).await {
                     Ok(result) => {
-                        if let postgres::SimpleQueryMessage::Row(row) = &result[0] {
-                            info!("drop_subscriptions_done: {:?}", row);
-                            true
-                        } else {
-                            false
-                        }
+                        matches!(&result[0], postgres::SimpleQueryMessage::Row(_))
                     },
                     Err(e) =>
                     {
@@ -1127,7 +1121,7 @@ impl ComputeNode {
                     ];
 
                     if spec.drop_subscriptions_before_start && !drop_subscriptions_done {
-                        info!("adding DropLogicalSubscriptions phase because drop_subscriptions_before_start is set");
+                        info!("Adding DropLogicalSubscriptions phase because drop_subscriptions_before_start is set");
                         phases.push(DropLogicalSubscriptions);
                     }
 
@@ -1540,8 +1534,6 @@ impl ComputeNode {
                     "neon.disable_logical_replication_subscribers=false",
                 )? {
                     info!("updated postgresql.conf to set neon.disable_logical_replication_subscribers=false");
-                } else {
-                    info!("postgresql.conf is up-to-date");
                 }
                 self.pg_reload_conf()?;
             }

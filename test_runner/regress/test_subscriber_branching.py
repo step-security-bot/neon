@@ -84,7 +84,7 @@ def test_subscriber_branching(neon_simple_env: NeonEnv):
             res = scur.fetchall()
             assert res[0][0] == n_records
 
-            scur.execute("SELECT timeline_id from neon_migration.drop_subscriptions_done")
+            scur.execute("SELECT timeline_id from neon.drop_subscriptions_done")
             res = scur.fetchall()
             log.info(f"timeline_id = {res}")
 
@@ -141,7 +141,7 @@ def test_subscriber_branching(neon_simple_env: NeonEnv):
         sub_child_1.start()
 
         with sub_child_1.cursor() as scur:
-            scur.execute("SELECT timeline_id from neon_migration.drop_subscriptions_done")
+            scur.execute("SELECT timeline_id from neon.drop_subscriptions_done")
             res = scur.fetchall()
             log.info(f"timeline_id = {res}")
 
@@ -160,7 +160,7 @@ def test_subscriber_branching(neon_simple_env: NeonEnv):
         insert_data(pub, n_records)
         n_records += n_records
         with sub_child_1.cursor() as scur:
-            scur.execute("SELECT timeline_id from neon_migration.drop_subscriptions_done")
+            scur.execute("SELECT timeline_id from neon.drop_subscriptions_done")
             res = scur.fetchall()
             log.info(f"timeline_id = {res}")
 
@@ -198,7 +198,7 @@ def test_subscriber_branching(neon_simple_env: NeonEnv):
         # ensure that subscriber_child_2 does not inherit subscription from child_1
         with sub_child_2.cursor() as scur:
             # ensure that drop_subscriptions_done happened on this timeline as well
-            scur.execute("SELECT timeline_id from neon_migration.drop_subscriptions_done")
+            scur.execute("SELECT timeline_id from neon.drop_subscriptions_done")
             res = scur.fetchall()
             log.info(f"timeline_ids: {res}")
             assert len(res) == 2

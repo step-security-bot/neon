@@ -449,7 +449,7 @@ async fn get_operations<'a>(
                     match &db {
                         DB::UserDB(db) => {
                             let drop_subscription_query: String = format!(
-                                include_str!("sql/drop_subscription_for_drop_dbs.sql"),
+                                include_str!("sql/drop_subscriptions.sql"),
                                 datname_str = escape_literal(&db.name),
                             );
 
