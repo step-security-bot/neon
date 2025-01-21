@@ -269,10 +269,7 @@ impl<C: ProjectInfoCache + Send + Sync + 'static> MessageHandler<C> {
                         .proxy
                         .redis_events_count
                         .inc(RedisEventsCount::AllowedVpcEndpointIdsUpdateForProjects);
-                } else if matches!(
-                    msg,
-                    Notification::AllowedVpcEndpointsUpdatedForOrg { .. }
-                ) {
+                } else if matches!(msg, Notification::AllowedVpcEndpointsUpdatedForOrg { .. }) {
                     Metrics::get()
                         .proxy
                         .redis_events_count
@@ -306,7 +303,7 @@ fn invalidate_cache<C: ProjectInfoCache>(cache: Arc<C>, msg: Notification) {
     match msg {
         Notification::AllowedIpsUpdate { allowed_ips_update } => {
             cache.invalidate_allowed_ips_for_project(allowed_ips_update.project_id);
-        },
+        }
         Notification::BlockPublicOrVpcAccessUpdated {
             block_public_or_vpc_access_updated,
         } => cache.invalidate_block_public_or_vpc_access_for_project(
