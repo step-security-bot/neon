@@ -85,6 +85,19 @@ impl Client {
         resp.json().await.map_err(Error::ReceiveBody)
     }
 
+    pub async fn delete_timeline(
+        &self,
+        tenant_id: TenantId,
+        timeline_id: TimelineId,
+    ) -> Result<TimelineStatus> {
+        let uri = format!(
+            "{}/v1/tenant/{}/timeline/{}",
+            self.mgmt_api_endpoint, tenant_id, timeline_id
+        );
+        let resp = self.request(Method::DELETE, &uri, ()).await?;
+        resp.json().await.map_err(Error::ReceiveBody)
+    }
+
     pub async fn timeline_status(
         &self,
         tenant_id: TenantId,
