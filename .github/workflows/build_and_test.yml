@@ -896,10 +896,10 @@ jobs:
 
             for version in ${VERSIONS}; do
               docker buildx imagetools create -t $repo/compute-node-${version}:latest \
-                                                 $repo/compute-node-${version}:${{ needs.tag.outputs.build-tag }}
+                                                 neondatabase/compute-node-${version}:${{ needs.tag.outputs.build-tag }}
 
               docker buildx imagetools create -t $repo/vm-compute-node-${version}:latest \
-                                                 $repo/vm-compute-node-${version}:${{ needs.tag.outputs.build-tag }}
+                                                 neondatabase/vm-compute-node-${version}:${{ needs.tag.outputs.build-tag }}
             done
           done
           docker buildx imagetools create -t neondatabase/neon-test-extensions-v16:latest \
