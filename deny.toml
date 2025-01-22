@@ -41,6 +41,7 @@ allow = [
     "MIT",
     "MPL-2.0",
     "OpenSSL",
+    "PostgreSQL",
     "Unicode-DFS-2016",
     "Unicode-3.0",
 ]

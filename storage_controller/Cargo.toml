@@ -50,6 +50,7 @@ diesel = { version = "2.2.6", features = [
     "chrono",
 ] }
 diesel_migrations = { version = "2.2.0" }
+pq-sys = { version = "0.6", features = ["bundled"]}
 r2d2 = { version = "0.8.10" }
 
 utils = { path = "../libs/utils/" }
